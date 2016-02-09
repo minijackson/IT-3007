@@ -1,0 +1,123 @@
+---
+title: k-Nearest Neighbours predictions
+author: Rémi NICOLE
+output:
+  pdf_document:
+    fig_caption: yes
+...
+
+Introduction
+============
+
+```{r}
+library(ggplot2)
+library(knitr)
+library(class)
+```
+
+```{r}
+myData <- read.csv("01_heights_weights_genders.csv")
+# Convert inches to centimeters
+myData$Height <- sapply(myData$Height, function(x) return(x*2.54))
+# Convert pounds to kilograms
+myData$Weight <- sapply(myData$Weight, function(x) return(x/2.205))
+```
+
+```{r, echo=FALSE}
+kable(head(myData), caption="Sample of Heights and Weights data")
+kable(summary(myData), caption="Summary of Heights and Weights data")
+```
+
+Normalizing
+===========
+
+```{r}
+normalize <- function(x) {
+	num <- x - min(x)
+	den <- max(x) - min(x)
+	return(num/den)
+}
+```
+
+```{r}
+myNormalizedData <- as.data.frame(lapply(myData[2:3], normalize))
+myNormalizedData$Gender <- myData$Gender
+```
+
+```{r, echo=FALSE}
+kable(head(myNormalizedData), caption="Sample of normalized Heights and Weights data")
+kable(summary(myNormalizedData), caption="Summary of normalized Heights and Weights data")
+```
+
+The training set
+================
+
+We divide the data into two shuffled groups, one will be used to train the
+system, and the other one is to test the trained system.
+
+```{r}
+ind <- sample(2, nrow(myNormalizedData), replace=TRUE, prob=c(0.67, 0.33))
+
+myNormalizedData.training <- myNormalizedData[ind==1, 1:2]
+myNormalizedData.trainLabels <- myNormalizedData[ind==1, 3]
+
+myNormalizedData.test <- myNormalizedData[ind==2, 1:2]
+myNormalizedData.testLabels <- myNormalizedData[ind==2, 3]
+```
+
+```{r, echo=FALSE}
+kable(head(myNormalizedData.training), caption="Sample of normalized Heights and Weights from the training data")
+kable(head(myNormalizedData.test), caption="Sample of normalized Heights and Weights from the test data")
+```
+
+KNN
+===
+
+```{r}
+predictions <- knn(train = myNormalizedData.training,
+                   test  = myNormalizedData.test,
+                   cl    = myNormalizedData.trainLabels,
+                   k     = 3)
+results <- data.frame(Predictions=predictions,
+                      Actual.Results=myNormalizedData.testLabels)
+incoherences <- sum(results$Predictions != results$Actual.Results)
+```
+
+```{r, echo=FALSE}
+kable(head(results, n=20), caption="Sample of the comparison between $knn$'s predictions and the actuel results")
+```
+
+Here, we found a total number of incoherent prediction of
+\(\Delta = `r incoherences`\), which means a error ratio of
+\(\dfrac{\Delta}{n} = \dfrac{`r incoherences`}{`r length(results$Actual.Results)`} = `r round(100* incoherences / length(results$Actual.Results), digits=2)`\%\).
+
+```{r, fig.cap="k-nearest neighbours visual comparison"}
+femaleTruePredictions <- ((results$Predictions    == "Female") &
+                          (results$Actual.Results == "Female"))*1
+
+femaleWrongPredictions <- ((results$Predictions    == "Female") &
+                           (results$Actual.Results == "Male"))*2
+
+maleTruePredictions <- ((results$Predictions    == "Male") &
+                        (results$Actual.Results == "Male"))*3
+
+maleWrongPredictions <- ((results$Predictions    == "Male") &
+                         (results$Actual.Results == "Female"))*4
+
+predictionsCategories <- factor(
+	femaleTruePredictions +
+	femaleWrongPredictions +
+	maleTruePredictions +
+	maleWrongPredictions)
+
+levels(predictionsCategories) <- c(
+	"Female true prediction",
+	"Female wrong prediction",
+	"Male true prediction",
+	"Male wrong prediction")
+
+ggplot(myNormalizedData.test, aes(x=Height, y=Weight)) +
+	geom_point(size=.8, aes(color=predictionsCategories)) +
+	scale_color_discrete(name="Predictions") +
+	theme(legend.position=c(0.83,0.25))
+```
