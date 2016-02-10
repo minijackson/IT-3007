@@ -1,0 +1,137 @@
+---
+title: Text Analysis and Data Clustering
+author: Rémi NICOLE
+output:
+  pdf_document:
+    fig_caption: yes
+...
+
+Introduction
+============
+
+```{r "libraries"}
+library(tm)
+data(acq)
+library(SnowballC)
+library(knitr)
+library(ggplot2)
+library(gplots)
+library(RColorBrewer)
+library(wordcloud)
+library(cluster)
+library(fpc)
+library(topicmodels)
+```
+
+Cleaning and Stemming
+=====================
+
+In order to clean the text, we have to remove the punctuation, the numbers,
+the stop-words of the English language and convert the text into all-lowercase
+text.
+
+We will also "stem" the text, which means that every word will be stripped
+down to the radical of the word. For example, the word "saying" will be
+replaced by "say".
+
+```{r "clean stem"}
+acq.clean <- tm_map(acq, removePunctuation)
+acq.clean <- tm_map(acq.clean, removeNumbers)
+acq.clean <- tm_map(acq.clean, tolower)
+acq.clean <- tm_map(acq.clean, removeWords, c(stopwords("english"), "said"))
+acq.clean <- tm_map(acq.clean, stemDocument)
+acq.clean <- tm_map(acq.clean, stripWhitespace)
+acq.clean <- tm_map(acq.clean, PlainTextDocument)
+# Print a sample of the cleaned text
+str(acq.clean[1][[1]]$content, width=80, strict.width="cut")
+```
+
+Document term matrices
+======================
+
+Then, we transform that data into a `DocumentTermMatrix` which is a matrix of
+occurrences of all the words stored in the data. We then sum the columns of
+the matrix to obtain the number of occurrences of the words.
+
+```{r "dtm"}
+acq.dtm <- DocumentTermMatrix(acq.clean)
+acq.freqs <- colSums(as.matrix(acq.dtm))
+```
+
+```{r "top frequencies", echo=FALSE}
+kable(head(acq.freqs[order(acq.freqs, decreasing=TRUE)], n=10), caption="Top frequent words in the acq dataset")
+```
+
+```{r "histogram", fig.cap="Histogram of the most used words"}
+acq.freqs.small <- acq.freqs[tail(order(acq.freqs), n=25)]
+acq.freqs.small <- data.frame(Word=names(acq.freqs.small),
+                              Frequency=acq.freqs.small)
+ggplot(acq.freqs.small, aes(Word, Frequency)) +
+	geom_bar(stat="identity") +
+	theme(axis.text.x=element_text(angle=45, hjust=1))
+```
+
+```{r "wordcloud", fig.cap="Wordcloud of the acq dataset"}
+acq.freqs <- data.frame(Word=names(acq.freqs),
+                        Frequency=acq.freqs)
+wordcloud(acq.freqs$Word,
+          acq.freqs$Frequency,
+          max.words=100,
+          scale=c(5, .1),
+          colors=brewer.pal(9, "Blues")[4:9])
+```
+
+Hierarchical clustering
+=======================
+
+From this part on, we will remove the sparse words. As our matrix is very
+sparse, we will only decrease the sparsity to 80% to have enough data to have
+meaningful clustering.
+
+```{r "distances and fitting"}
+acq.dtms <- removeSparseTerms(acq.dtm, .8)
+acq.distances <- dist(t(acq.dtms), method="euclidian")
+acq.hfit <- hclust(acq.distances, method="ward.D2")
+```
+
+```{r "heatmap", fig.cap="Heatmap of the distance between the words"}
+heatmap.2(as.matrix(acq.distances), trace="none")
+```
+
+```{r "dendogram", fig.cap="Clustered dendogram of the relations between the words"}
+plot(acq.hfit, hang=-1)
+rect.hclust(acq.hfit, k=7, border="gray")
+```
+
+K-means clustering
+==================
+
+```{r "cluster plot"}
+acq.kfit <- kmeans(acq.distances, 5, 500)
+clusplot(as.matrix(acq.distances), acq.kfit$cluster, color=T, shade=T, labels=2)
+```
+
+Topic models
+============
+
+```{r "topic finding"}
+acq.lda <- LDA(acq.dtm, k=7)
+acq.terms <- terms(acq.lda, 4)
+acq.terms <- apply(acq.terms, MARGIN=2, paste, collapse=", ")
+
+acq.topics <- data.frame(document=1:50, topics(acq.lda))
+```
+
+```{r "Topic terms table", echo=FALSE}
+kable(acq.terms, caption="Topic terms")
+```
+
+```{r "document topics"}
+acq.topicsWKeywods <-
+	data.frame(Document=1:50,
+	           Topic.Keywords=acq.terms[acq.topics$topics.acq.lda.])
+kable(acq.topicsWKeywods, caption="Topic terms")
+```
+
+<!-- Thank you: https://rstudio-pubs-static.s3.amazonaws.com/31867_8236987cf0a8444e962ccd2aec46d9c3.html -->
+<!-- Thank you: http://fr.slideshare.net/rdatamining/text-mining-with-r-an-analysis-of-twitter-data -->
