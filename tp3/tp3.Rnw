@@ -1,0 +1,108 @@
+\documentclass{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage[hidelinks]{hyperref}
+\usepackage{amsmath}
+\usepackage{fullpage}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{biblatex}
+\usepackage{float}
+
+\title{Discimination de bonnes ou mauvaises réponses}
+\author{Rémi NICOLE}
+
+\addbibresource{tp2.bib}
+
+\begin{document}
+
+\maketitle
+
+\part{Introduction}
+
+<<libraries, message=FALSE, warnings=FALSE>>=
+library(ggplot2)
+library(knitr)
+library(xts)
+@
+
+\part{Chargement des données}
+
+<<loadingCSV>>=
+FluTrain <- read.csv("FluTrain.csv")
+@
+
+\part{Questions}
+
+\section{Question 1}
+
+<<mostVisitsWeek>>=
+as.character(FluTrain[FluTrain$ILI == max(FluTrain$ILI), 1])
+@
+
+<<mostQueriesWeek>>=
+as.character(FluTrain[FluTrain$Queries == 1, 1])
+@
+
+\section{Question 2}
+
+<<ILIhist, fig.cap="Histogramme de ILI", fig.pos="H">>=
+ggplot(FluTrain, aes(ILI)) +
+  xlab("Date") +
+  ylab("Total") +
+  geom_histogram(bins=150)
+@
+
+<<ILIQueriesPlot, fig.cap="Nuage de points de ILI en fonction de Queries", fig.pos="H">>=
+ggplot(FluTrain, aes(Queries, ILI)) +
+  geom_point()
+@
+
+<<loadingCSV2>>=
+FluTrain2 <- read.csv("FluTrain2.csv")
+@
+
+<<ILIQueriesLogPlot, fig.cat="Nuage de points de ILI en fonction de Queries", fig.pos="H">>=
+ggplot(FluTrain2, aes(Queries, logILI)) +
+  geom_point()
+@
+
+<<ILIQueriesCor>>=
+cor(FluTrain2$Queries, FluTrain2$logILI)
+@
+
+\section{Question 3}
+
+<<logILIFitCoeffs>>=
+logILI.fit <- lm(logILI ~ Queries, data=FluTrain2)
+coef(logILI.fit)
+summary(logILI.fit)$r.squared
+@
+
+<<logILIFit, fig.cap="Nuage de points de logILI en fonction de Queries avec sa droite de régression", fig.pos="H">>=
+ggplot(FluTrain2, aes(Queries, logILI)) +
+  geom_point() +
+  geom_smooth(method="lm")
+@
+
+\section{Question 5}
+
+<<loadingFluTest2>>=
+FluTest2 <- read.csv("FluTest2.csv")
+@
+
+<<automaticBibliography, echo=FALSE>>=
+write_bib(sub("^.*/", "", grep("^/", searchpaths(), value=TRUE)),
+          file="tp2.bib")
+@
+
+\nocite{*}
+
+%\bibliographystyle{chicago}
+
+\printbibliography
+
+\end{document}

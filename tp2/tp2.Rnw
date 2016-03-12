@@ -1,0 +1,127 @@
+\documentclass{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage[hidelinks]{hyperref}
+\usepackage{amsmath}
+\usepackage{fullpage}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{biblatex}
+\usepackage{float}
+
+\title{Discimination de bonnes ou mauvaises réponses}
+\author{Rémi NICOLE}
+
+\addbibresource{tp2.bib}
+
+\begin{document}
+
+\maketitle
+
+\part{Introduction}
+
+<<libraries, message=FALSE, warnings=FALSE>>=
+library(ggplot2)
+library(knitr)
+library(httr)
+library(rjson)
+@
+
+\part{Chargement des données}
+
+\section{Récupération}
+
+<<url, echo=FALSE, results="hide">>=
+apiUrl <- "https://api.stackexchange.com/2.2/search/advanced?pagesize=100&order=desc&sort=activity&accepted=True&closed=True&tagged=ipython&site=stackoverflow&filter=!*L1(ZTe*8)k0CMEL&key=ACNpxD0PS7)lMe*lkPPOWw(("
+@
+
+<<dataLoading>>=
+jsonData <- GET(apiUrl)
+dataSO <- fromJSON(content(jsonData, "text"))
+@
+
+\section{Sauvegarde dans un fichier CSV}
+
+<<selectFunction>>=
+select <- function(x, n) {
+  if(typeof(n) == "character" && !is.na(x)) {
+    return(x[[n]])
+  } else if(length(x) >= n && !is.na(x)) {
+    return(x[[n]])
+  } else {
+    return(NA)
+  }
+}
+
+questionData <- function(key) {
+  return(sapply(dataSO$items, "[[", key))
+}
+
+answers <- sapply(dataSO$items, "[[", "answers")
+
+answerData <- function(n, key) {
+  return(sapply(sapply(answers, select, n), select, key))
+}
+@
+
+<<csvSave>>=
+creationDates  <- as.POSIXct(questionData("creation_date"),
+                             origin="1970-01-01")
+questionIds    <- as.integer(questionData("question_id"))
+tags           <- sapply(questionData("tags"), paste, collapse=" - ")
+questionTitles <- questionData("title")
+questionBodies <- questionData("body")
+
+# Brain melt:
+# The first parameter of the first `sapply` is actually a double nested for loop,
+# which will return a vector of logical, TRUE meaning that the answer in this
+# index is accepted. Then, it is the job of `which` to return the index of
+# the accepted answer
+accepted <- sapply(sapply(answers, sapply, "[[", "is_accepted"), which)
+
+dataSO.csv <- list(creation_date      = creationDates,
+                   question_id        = questionIds,
+                   tags               = tags,
+                   question_title     = questionTitles,
+                   question_body      = questionBodies,
+                   accepted           = accepted,
+                   answer1_body       = answerData(1, "body"),
+                   answer1_score      = answerData(1, "score"),
+                   answer1_nbcomments = answerData(1, "comment_count"),
+                   answer2_body       = answerData(2, "body"),
+                   answer2_score      = answerData(2, "score"),
+                   answer2_nbcomments = answerData(2, "comment_count"),
+                   answer3_body       = answerData(3, "body"),
+                   answer3_score      = answerData(3, "score"),
+                   answer3_nbcomments = answerData(3, "comment_count"),
+                   answer4_body       = answerData(4, "body"),
+                   answer4_score      = answerData(4, "score"),
+                   answer4_nbcomments = answerData(4, "comment_count"),
+                   answer5_body       = answerData(5, "body"),
+                   answer5_score      = answerData(5, "score"),
+                   answer5_nbcomments = answerData(5, "comment_count"))
+
+write.csv(dataSO.csv, "tp2.csv")
+@
+
+<<csvDataPreview, echo=FALSE>>=
+kable(head(as.data.frame(dataSO.csv[c("question_title", "creation_date")]), n=10), booktabs=TRUE, caption="Exemples de questions dans le jeu de donnée")
+@
+
+\part{Recherche et définitions de features}
+
+<<automaticBibliography, echo=FALSE>>=
+write_bib(sub("^.*/", "", grep("^/", searchpaths(), value=TRUE)),
+          file="tp2.bib")
+@
+
+\nocite{*}
+
+%\bibliographystyle{chicago}
+
+\printbibliography
+
+\end{document}

@@ -1,0 +1,189 @@
+\documentclass{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[hidelinks]{hyperref}
+\usepackage[french]{babel}
+\usepackage{amsmath}
+\usepackage{fullpage}
+\usepackage{microtype}
+\usepackage{booktabs}
+\usepackage{longtable}
+\usepackage{biblatex}
+\usepackage{float}
+
+\title{Text Analysis and Data Clustering}
+\author{Rémi NICOLE}
+
+\addbibresource{tp1.bib}
+
+\begin{document}
+
+\maketitle
+
+\part{Introduction}
+
+<<libraries, message=FALSE, warnings=FALSE>>=
+library(tm)
+data(acq)
+library(SnowballC)
+library(knitr)
+library(ggplot2)
+library(gplots)
+library(RColorBrewer)
+library(wordcloud)
+library(cluster)
+library(fpc)
+library(topicmodels)
+@
+
+\part{Messages ``jouets''}
+
+\section{Phrases d'exemple}
+
+<<corpusExample>>=
+playCorpus.vector <-   c("J'aime l'informatique.",
+    "En informatique, il faut persévérer.",
+    "Les soirées sont très aimées par les étudiants!",
+    "Les étudiants sont tous des flemmards...",
+    "Je suis étudiant en informatique.",
+    "L'informatique est un domaine passionnant!",
+    "L'informatique est un domaine d'activité scientifique, technique et
+    industriel concernant le traitement automatique de l'information via
+    l’exécution de programmes informatiques par des machines.",
+    "Étudiant (au féminin étudiante) est un mot dérivé du latin studere qui
+    signifie « s'appliquer à apprendre quelque chose ».",
+    "Il n'existe pas de statut international de l'étudiant.",
+    "Le terme « informatique » résulte de l'association des trois premières
+    syllabes du terme « information » et des deux dernières syllabes du terme «
+    automatique ».")
+
+playCorpus <- VCorpus(VectorSource(playCorpus.vector),
+                      readerControl=list(language="french"))
+@
+
+\section{Nettoyage et ``stemming''}
+
+<<corpusCleaning>>=
+playCorpus.clean <- tm_map(playCorpus, removeNumbers)
+for(i in seq(playCorpus.clean)) {
+  playCorpus.clean[[i]] <- gsub("'", " ", playCorpus.clean[[i]])
+}
+playCorpus.clean <- tm_map(playCorpus.clean, removePunctuation)
+playCorpus.clean <- tm_map(playCorpus.clean, tolower)
+playCorpus.clean <- tm_map(playCorpus.clean, removeWords, c(stopwords("french"), "quelqu"))
+playCorpus.clean <- tm_map(playCorpus.clean, stripWhitespace)
+playCorpus.clean <- tm_map(playCorpus.clean, PlainTextDocument)
+playCorpus.clean <- tm_map(playCorpus.clean, stemDocument, language="french")
+@
+
+\section{\texttt{DocumentTermMatrix}, fréquences et matrice de distance}
+
+<<dtm>>=
+playCorpus.dtm <- DocumentTermMatrix(playCorpus.clean)
+playCorpus.freqs <- colSums(as.matrix(playCorpus.dtm))
+playCorpus.freqs <- data.frame(Mot=names(playCorpus.freqs),
+                               Frequence=playCorpus.freqs)
+playCorpus.dtms <- removeSparseTerms(playCorpus.dtm, .9)
+playCorpus.distances <- dist(t(playCorpus.dtms), method="euclidian")
+@
+
+<<corpusVocabulary>>=
+# Vocabulaire du corpus de messages "jouets"
+playCorpus.dtm$dimnames$Terms
+@
+
+<<topFrequencies, echo=FALSE>>=
+kable(head(playCorpus.freqs[order(playCorpus.freqs$Frequence, decreasing=TRUE),c(1,2)], n=10), caption="Mots les plus fréquents dans du corpus de messages ``jouets''", booktabs=TRUE, row.names=FALSE)
+@
+
+<<histogram, fig.cap="Histogramme des mots les plus fréquents", fig.pos="H">>=
+playCorpus.freqs.small <- playCorpus.freqs[tail(order(playCorpus.freqs$Frequence),
+                                                n=25),
+                                           c(1,2)]
+ggplot(playCorpus.freqs.small, aes(Mot, Frequence)) +
+	geom_bar(stat="identity") +
+	theme(axis.text.x=element_text(angle=45, hjust=1))
+@
+
+<<heatmap, fig.cap="Matrice de distances du corpus des messages ``jouets''", fig.pos="H">>=
+heatmap.2(as.matrix(playCorpus.distances), trace="none")
+@
+
+\section{Kmeans et clusters}
+
+<<cluster, fig.cap="Clusters du corpus des messages ``jouets''", fig.pos="H">>=
+playCorpus.kfit <- kmeans(playCorpus.distances, 2, 500)
+clusplot(as.matrix(playCorpus.distances), playCorpus.kfit$cluster,
+         color=TRUE, shade=TRUE, labels=2)
+@
+
+\part{Newsgroups}
+
+\section{Chargement des données}
+
+<<corpusNewsGroups>>=
+newsg.groups <- list.files("data/379/train/")
+newsg.corpus <- VCorpus(DirSource("data/379/train/", recursive=TRUE),
+                        readerControl = list(language="en"))
+# newsg.corpus <- VCorpus(DirSource("data/379/train/alt.atheism/", recursive=TRUE),
+#                         readerControl=list(language="en"))
+@
+
+\section{Nettoyage et ``stemming''}
+
+<<corpusCleaningNewsGroups>>=
+newsg.clean <- newsg.corpus
+# Remove the replies
+for(i in seq(playCorpus.clean)) {
+  newsg.clean[[i]] <- sub("^>.*$", "", newsg.clean[[i]])
+}
+newsg.clean <- tm_map(newsg.clean, removeNumbers)
+newsg.clean <- tm_map(newsg.clean, removePunctuation)
+newsg.clean <- tm_map(newsg.clean, tolower)
+newsg.clean <- tm_map(newsg.clean, removeWords, c(stopwords("english"), "said"))
+newsg.clean <- tm_map(newsg.clean, stripWhitespace)
+newsg.clean <- tm_map(newsg.clean, PlainTextDocument)
+newsg.clean <- tm_map(newsg.clean, stemDocument, language="english")
+@
+
+\section{\texttt{DocumentTermMatrix}, fréquences et matrice de distance}
+
+<<dtmNewsGroups>>=
+newsg.dtm <- DocumentTermMatrix(newsg.clean)
+newsg.freqs <- colSums(as.matrix(newsg.dtm))
+newsg.freqs <- data.frame(Mot=names(newsg.freqs),
+                          Frequence=newsg.freqs)
+newsg.dtms <- removeSparseTerms(newsg.dtm, .9)
+newsg.distances <- dist(t(newsg.dtms), method="euclidian")
+@
+
+<<histogramNewsGroups, fig.cap="Histogramme des mots les plus fréquents", fig.pos="H">>=
+newsg.freqs.small <- newsg.freqs[tail(order(newsg.freqs$Frequence), n=25), c(1,2)]
+ggplot(newsg.freqs.small, aes(Mot, Frequence)) +
+  geom_bar(stat="identity") +
+  theme(axis.text.x=element_text(angle=45, hjust=1))
+@
+
+<<heatmapNewsGroups, fig.cap="Matrice de distances du corpus des messages de Newsgroups", fig.pos="H">>=
+heatmap.2(as.matrix(newsg.distances), trace="none")
+@
+
+\section{Kmeans et clusters}
+
+<<clusterNewsGroups, fig.cap="Clusters du corpus des messages de Newsgroups", fig.pos="H">>=
+newsg.kfit <- kmeans(newsg.distances, length(newsg.groups), 500)
+clusplot(as.matrix(newsg.distances), newsg.kfit$cluster,
+         color=TRUE, shade=TRUE, labels=2)
+@
+
+
+<<automaticBibliography, echo=FALSE>>=
+write_bib(sub("^.*/", "", grep("^/", searchpaths(), value=TRUE)),
+          file="tp1.bib")
+@
+
+\nocite{*}
+\printbibliography
+
+\end{document}
